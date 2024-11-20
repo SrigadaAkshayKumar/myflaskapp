@@ -1,11 +1,12 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
-# Enable CORS for all origins
+# Enable CORS for all origins (you can restrict this to specific domains)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure Flask-SocketIO
@@ -22,6 +23,10 @@ def index():
 def heartbeat():
     return jsonify({"status": "OK", "message": "Server is up and reachable!"})
 
+@socketio.on('connect')
+def handle_connect():
+    print(f"[INFO] Client connected: {request.sid}")
+
 @socketio.on('register')
 def handle_register(data):
     user_id = data.get('userId')
@@ -31,7 +36,7 @@ def handle_register(data):
 
     users[user_id] = request.sid  # Map user ID to socket ID
     print(f"[INFO] User {user_id} registered with socket ID {request.sid}")
-    emit('registered', {'message': f'Registration successful for {user_id}'})
+    emit('registered', {'message': f'Registration successful for {user_id}'}, to=request.sid)
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
@@ -70,6 +75,5 @@ def handle_disconnect():
         print("[INFO] Unknown disconnection")
 
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get('PORT', 8080))  # Default to 5000 if PORT is not set
-    socketio.run(app, host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 8080))
+    socketio.run(app, host='0.0.0.0', port=port, debug=True)
