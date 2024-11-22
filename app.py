@@ -54,9 +54,12 @@ def handle_register(data):
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
+    print(f"[DEBUG] Received message data: {data}")  # Debug log
     sender_id = data.get('senderId')
     recipient_id = data.get('recipientId')
     encrypted_message = data.get('encryptedMessage')
+
+    print(f"[DEBUG] Current users: {users}")  # Debug log
 
     if not all([sender_id, recipient_id, encrypted_message]):
         emit('error', {'message': 'Invalid data. Ensure senderId, recipientId, and encryptedMessage are provided.'})
@@ -64,6 +67,7 @@ def handle_send_message(data):
 
     if recipient_id in users:
         recipient_sid = users[recipient_id]
+        print(f"[DEBUG] Sending to recipient {recipient_id} with socket ID {recipient_sid}")  # Debug log
         emit(
             'receiveMessage',
             {'encryptedMessage': encrypted_message, 'senderId': sender_id},
@@ -71,11 +75,7 @@ def handle_send_message(data):
         )
         print(f"[INFO] Message sent from {sender_id} to {recipient_id}")
     else:
-        # Store the message for later delivery
-        if recipient_id not in offline_messages:
-            offline_messages[recipient_id] = []
-        offline_messages[recipient_id].append({'senderId': sender_id, 'encryptedMessage': encrypted_message})
-        print(f"[INFO] Recipient {recipient_id} not connected. Message stored for offline delivery.")
+        print(f"[DEBUG] Recipient {recipient_id} not found in users dict")  # Debug log
 
 
 @socketio.on('disconnect')
