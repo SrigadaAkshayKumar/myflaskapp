@@ -48,6 +48,8 @@ def handle_send_message(data):
         emit('error', {'message': 'Invalid data. Ensure senderId, recipientId, and encryptedMessage are provided.'})
         return
 
+    print(f"[INFO] Sending message from {sender_id} to {recipient_id}: {encrypted_message}")
+
     if recipient_id in users:
         recipient_sid = users[recipient_id]
         emit(
@@ -62,6 +64,7 @@ def handle_send_message(data):
             'encryptedMessage': encrypted_message,
             'senderId': sender_id
         })
+        print(f"[INFO] User {recipient_id} offline. Message saved.")
 
 @socketio.on('disconnect')
 def handle_disconnect():
