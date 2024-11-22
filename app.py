@@ -6,14 +6,15 @@ import os
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
-# Enable CORS for all origins (you can restrict this to specific domains)
+# Enable CORS for all origins
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure Flask-SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 # Store users and their socket IDs
-users = {}
+users = {}  # {userId: socketId}
+offline_messages = {}  # {recipientId: [{'senderId': senderId, 'encryptedMessage': message}]}
 
 @app.route('/')
 def index():
@@ -34,9 +35,17 @@ def handle_register(data):
         emit('error', {'message': 'User ID is required for registration.'})
         return
 
-    users[user_id] = request.sid  # Map user ID to socket ID
+    # Register the user with their socket ID
+    users[user_id] = request.sid
     print(f"[INFO] User {user_id} registered with socket ID {request.sid}")
     emit('registered', {'message': f'Registration successful for {user_id}'}, to=request.sid)
+
+    # Deliver offline messages if any exist for this user
+    if user_id in offline_messages:
+        for message in offline_messages[user_id]:
+            emit('receiveMessage', message, to=request.sid)
+        del offline_messages[user_id]  # Clear the offline messages after delivery
+        print(f"[INFO] Delivered offline messages to {user_id}")
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
@@ -57,8 +66,11 @@ def handle_send_message(data):
         )
         print(f"[INFO] Message sent from {sender_id} to {recipient_id}")
     else:
-        print(f"[WARNING] Recipient {recipient_id} not connected")
-        emit('error', {'message': f'Recipient {recipient_id} not connected'})
+        # Store the message for later delivery
+        if recipient_id not in offline_messages:
+            offline_messages[recipient_id] = []
+        offline_messages[recipient_id].append({'senderId': sender_id, 'encryptedMessage': encrypted_message})
+        print(f"[INFO] Recipient {recipient_id} not connected. Message stored for offline delivery.")
 
 @socketio.on('disconnect')
 def handle_disconnect():
