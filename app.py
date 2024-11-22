@@ -16,17 +16,21 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 users = {}  # {userId: socketId}
 offline_messages = {}  # {recipientId: [{'senderId': senderId, 'encryptedMessage': message}]}
 
+
 @app.route('/')
 def index():
     return jsonify({"status": "Server is running", "message": "Welcome to Flask SocketIO server!"})
+
 
 @app.route('/heartbeat', methods=['GET'])
 def heartbeat():
     return jsonify({"status": "OK", "message": "Server is up and reachable!"})
 
+
 @socketio.on('connect')
 def handle_connect():
     print(f"[INFO] Client connected: {request.sid}")
+
 
 @socketio.on('register')
 def handle_register(data):
@@ -46,6 +50,7 @@ def handle_register(data):
             emit('receiveMessage', message, to=request.sid)
         del offline_messages[user_id]  # Clear the offline messages after delivery
         print(f"[INFO] Delivered offline messages to {user_id}")
+
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
@@ -72,6 +77,7 @@ def handle_send_message(data):
         offline_messages[recipient_id].append({'senderId': sender_id, 'encryptedMessage': encrypted_message})
         print(f"[INFO] Recipient {recipient_id} not connected. Message stored for offline delivery.")
 
+
 @socketio.on('disconnect')
 def handle_disconnect():
     disconnected_sid = request.sid
@@ -85,6 +91,7 @@ def handle_disconnect():
         print(f"[INFO] User {user_to_remove} disconnected")
     else:
         print("[INFO] Unknown disconnection")
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
