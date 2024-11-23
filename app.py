@@ -44,12 +44,22 @@ def handle_register(data):
     if not user_id:
         emit('error', {'message': 'User ID is required for registration.'})
         return
-    
+
+    # Save user and prevent overwriting the socket-to-user mapping
     users_ref.child(user_id).set(request.sid)
     socket_to_user[request.sid] = user_id
 
+    # Retrieve offline messages
+    offline_messages = messages_ref.child(user_id).get() or []
+    for message in offline_messages:
+        emit('receiveMessage', message, to=request.sid)
+
+    # Clear offline messages
+    messages_ref.child(user_id).delete()
+
     print(f"[INFO] User {user_id} registered with socket ID {request.sid}")
     emit('registered', {'message': f'Registration successful for {user_id}'}, to=request.sid)
+
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
