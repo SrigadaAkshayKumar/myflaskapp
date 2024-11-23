@@ -66,6 +66,7 @@ def handle_register(data):
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
+    print(f"Received message data: {data}")  # Log the incoming message data
     sender_id = data.get('senderId')
     recipient_id = data.get('recipientId')
     encrypted_message = data.get('encryptedMessage')
@@ -91,6 +92,7 @@ def handle_send_message(data):
             'encryptedMessage': encrypted_message
         })
         print(f"[INFO] User {recipient_id} is offline. Message saved.")
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
