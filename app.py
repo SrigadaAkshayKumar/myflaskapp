@@ -31,6 +31,9 @@ firebase_admin.initialize_app(cred, {
 users_ref = db.reference('users')  # For storing user connections
 messages_ref = db.reference('messages')  # For storing offline messages
 
+# Reverse mapping of socket IDs to user IDs (in-memory cache for efficient lookups)
+socket_to_user = {}
+
 # SocketIO handlers
 @app.route('/')
 def index():
@@ -51,8 +54,10 @@ def handle_register(data):
         emit('error', {'message': 'User ID is required for registration.'})
         return
     
-    # Save user with their socket ID in the database
+    # Save user with their socket ID in the database and reverse mapping
     users_ref.child(user_id).set(request.sid)
+    socket_to_user[request.sid] = user_id
+
     print(f"[INFO] User {user_id} registered with socket ID {request.sid}")
     emit('registered', {'message': f'Registration successful for {user_id}'}, to=request.sid)
 
@@ -66,7 +71,7 @@ def handle_register(data):
 
 @socketio.on('sendMessage')
 def handle_send_message(data):
-    print(f"Received message data: {data}")  # Log the incoming message data
+    print(f"[INFO] Received message data: {data}")  # Log the incoming message data
     sender_id = data.get('senderId')
     recipient_id = data.get('recipientId')
     encrypted_message = data.get('encryptedMessage')
@@ -83,8 +88,9 @@ def handle_send_message(data):
         emit('receiveMessage', {
             'encryptedMessage': encrypted_message,
             'senderId': sender_id
-        }, room=recipient_sid)
-        print(f"[INFO] Message sent to {recipient_id}")
+        }, to=recipient_sid)
+        print(f"[INFO] Message sent to {recipient_id} via socket {recipient_sid}")
+        emit('messageStatus', {'status': 'delivered'}, to=request.sid)  # Acknowledge sender
     else:
         # Save the message for offline delivery
         messages_ref.child(recipient_id).push({
@@ -92,23 +98,16 @@ def handle_send_message(data):
             'encryptedMessage': encrypted_message
         })
         print(f"[INFO] User {recipient_id} is offline. Message saved.")
-
+        emit('messageStatus', {'status': 'offline_saved'}, to=request.sid)  # Acknowledge sender
 
 @socketio.on('disconnect')
 def handle_disconnect():
     disconnected_sid = request.sid
-    user_to_remove = None
+    user_to_remove = socket_to_user.pop(disconnected_sid, None)
 
-    # Find user with this socket ID and remove them
-    all_users = users_ref.get() or {}
-    for user_id, sid in all_users.items():
-        if sid == disconnected_sid:
-            user_to_remove = user_id
-            break
-    
     if user_to_remove:
         users_ref.child(user_to_remove).delete()
-        print(f"[INFO] User {user_to_remove} disconnected")
+        print(f"[INFO] User {user_to_remove} disconnected and removed from users.")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
