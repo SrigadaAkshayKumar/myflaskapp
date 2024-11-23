@@ -34,15 +34,6 @@ messages_ref = db.reference('messages')  # For storing offline messages
 # Reverse mapping of socket IDs to user IDs (in-memory cache for efficient lookups)
 socket_to_user = {}
 
-# SocketIO handlers
-@app.route('/')
-def index():
-    return jsonify({"status": "Server is running", "message": "Welcome to Flask SocketIO server!"})
-
-@app.route('/heartbeat', methods=['GET'])
-def heartbeat():
-    return jsonify({"status": "OK", "message": "Server is up and reachable!"})
-
 @socketio.on('connect')
 def handle_connect():
     print(f"[INFO] Client connected: {request.sid}")
@@ -54,51 +45,35 @@ def handle_register(data):
         emit('error', {'message': 'User ID is required for registration.'})
         return
     
-    # Save user with their socket ID in the database and reverse mapping
     users_ref.child(user_id).set(request.sid)
     socket_to_user[request.sid] = user_id
 
     print(f"[INFO] User {user_id} registered with socket ID {request.sid}")
     emit('registered', {'message': f'Registration successful for {user_id}'}, to=request.sid)
 
-    # Deliver offline messages if any exist for this user
-    offline_messages = messages_ref.child(user_id).get() or []
-    for message in offline_messages:
-        emit('receiveMessage', message, to=request.sid)
-    # Clear offline messages after delivery
-    messages_ref.child(user_id).delete()
-    print(f"[INFO] Delivered offline messages to {user_id}")
-
 @socketio.on('sendMessage')
 def handle_send_message(data):
-    print(f"[INFO] Received message data: {data}")  # Log the incoming message data
     sender_id = data.get('senderId')
     recipient_id = data.get('recipientId')
     encrypted_message = data.get('encryptedMessage')
 
     if not all([sender_id, recipient_id, encrypted_message]):
-        emit('error', {'message': 'Invalid data. Ensure senderId, recipientId, and encryptedMessage are provided.'})
+        emit('error', {'message': 'Invalid data.'})
         return
 
-    print(f"[INFO] Sending message from {sender_id} to {recipient_id}: {encrypted_message}")
-
-    # Check if recipient is online
     recipient_sid = users_ref.child(recipient_id).get()
     if recipient_sid:
         emit('receiveMessage', {
             'encryptedMessage': encrypted_message,
             'senderId': sender_id
         }, to=recipient_sid)
-        print(f"[INFO] Message sent to {recipient_id} via socket {recipient_sid}")
-        emit('messageStatus', {'status': 'delivered'}, to=request.sid)  # Acknowledge sender
+        emit('messageStatus', {'status': 'delivered'}, to=request.sid)
     else:
-        # Save the message for offline delivery
         messages_ref.child(recipient_id).push({
             'senderId': sender_id,
             'encryptedMessage': encrypted_message
         })
-        print(f"[INFO] User {recipient_id} is offline. Message saved.")
-        emit('messageStatus', {'status': 'offline_saved'}, to=request.sid)  # Acknowledge sender
+        emit('messageStatus', {'status': 'offline_saved'}, to=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -107,8 +82,6 @@ def handle_disconnect():
 
     if user_to_remove:
         users_ref.child(user_to_remove).delete()
-        print(f"[INFO] User {user_to_remove} disconnected and removed from users.")
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    socketio.run(app, host='0.0.0.0', port=8080)
